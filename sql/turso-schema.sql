@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   display_name TEXT NOT NULL,
   avatar_url TEXT,
+  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'moderator', 'admin')),
+  is_banned INTEGER NOT NULL DEFAULT 0 CHECK (is_banned IN (0, 1)),
+  banned_until TEXT,
+  ban_reason TEXT,
   elo INTEGER NOT NULL DEFAULT 1200 CHECK (elo BETWEEN 0 AND 4000),
   games_played INTEGER NOT NULL DEFAULT 0,
   games_won INTEGER NOT NULL DEFAULT 0,
@@ -24,6 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_elo ON users (elo DESC);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
+CREATE INDEX IF NOT EXISTS idx_users_banned ON users (is_banned) WHERE is_banned = 1;
 
 -- Trigger to update updated_at on every update
 CREATE TRIGGER IF NOT EXISTS trg_users_updated_at
@@ -164,6 +170,38 @@ CREATE TABLE IF NOT EXISTS spectator_logs (
 
 CREATE INDEX IF NOT EXISTS idx_spectator_logs_room ON spectator_logs (room_id);
 CREATE INDEX IF NOT EXISTS idx_spectator_logs_user ON spectator_logs (user_id);
+
+-- ----------------------------------------------------------------------------
+-- campaign_levels — định nghĩa các level campaign (admin tạo)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS campaign_levels (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  difficulty TEXT NOT NULL CHECK (difficulty IN ('beginner', 'intermediate', 'advanced', 'expert')),
+  order_index INTEGER NOT NULL UNIQUE,
+  initial_fen TEXT NOT NULL,
+  target_objective TEXT NOT NULL, -- 'checkmate_in_3', 'win_material', etc.
+  time_limit_ms INTEGER,
+  star_thresholds TEXT NOT NULL, -- JSON: {"1": 60000, "2": 45000, "3": 30000}
+  ai_level INTEGER NOT NULL DEFAULT 1200 CHECK (ai_level BETWEEN 800 AND 2800),
+  is_published INTEGER NOT NULL DEFAULT 0 CHECK (is_published IN (0, 1)),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_campaign_levels_order ON campaign_levels (order_index);
+CREATE INDEX IF NOT EXISTS idx_campaign_levels_published ON campaign_levels (is_published) WHERE is_published = 1;
+
+-- Trigger to update updated_at on campaign_levels
+CREATE TRIGGER IF NOT EXISTS trg_campaign_levels_updated_at
+  AFTER UPDATE ON campaign_levels
+  FOR EACH ROW
+BEGIN
+  UPDATE campaign_levels SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
 
 -- ============================================================================
 -- NOTES:

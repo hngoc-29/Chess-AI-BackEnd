@@ -26,3 +26,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   req.profile = await ensureProfile(user.id, user.email);
   next();
 }
+
+// Alias export for compatibility
+export const httpAuth = requireAuth;

@@ -11,6 +11,8 @@ import { authRouter } from './routes/auth.routes';
 import { matchesRouter } from './routes/matches.routes';
 import { campaignRouter } from './routes/campaign.routes';
 import { healthRouter } from './routes/health.routes';
+import { adminRouter } from './routes/admin.routes';
+import { adminLevelsRouter } from './routes/admin-levels.routes';
 import { createSocketServer } from './socket/index';
 
 const app = express();
@@ -26,6 +28,8 @@ app.use('/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/matches', matchesRouter);
 app.use('/api/campaign', campaignRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/admin/levels', adminLevelsRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

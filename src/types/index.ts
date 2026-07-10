@@ -13,9 +13,12 @@ export type GameResultType =
 
 export type RoomMode = 'ranked' | 'custom' | 'campaign';
 
+export type UserRole = 'user' | 'moderator' | 'admin';
+
 export interface AuthedUser {
-  id: string; // Supabase auth.users.id (uuid)
+  id: string;
   email?: string | null;
+  role?: UserRole;
 }
 
 export interface PlayerSlot {
