@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/httpAuth';
 import { CAMPAIGN_LEVELS } from '../campaign/levels';
 import { validateCampaignSubmission } from '../campaign/validateCampaign';
 import { persistCampaignResult } from '../services/campaignService';
-import { supabaseAdmin } from '../db/supabase';
+import { query } from '../db/turso';
 import { HttpError } from '../middleware/errorHandler';
 import { CampaignCompleteSchema, parseOrError } from '../utils/validation';
 
@@ -23,11 +23,16 @@ campaignRouter.get('/levels', requireAuth, (_req, res) => {
 /** The logged-in user's progress (completed/stars) across all levels. */
 campaignRouter.get('/progress', requireAuth, async (req, res, next) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('user_levels')
-      .select('level_id, completed, stars, best_duration_ms, last_attempt_at')
-      .eq('user_id', req.userId);
-    if (error) throw new HttpError(500, 'DB_ERROR', error.message);
+    const data = await query<{
+      level_id: string;
+      completed: number;
+      stars: number;
+      best_duration_ms: number;
+      last_attempt_at: string;
+    }>(
+      'SELECT level_id, completed, stars, best_duration_ms, last_attempt_at FROM user_levels WHERE user_id = ?',
+      [req.userId]
+    );
     res.json({ progress: data });
   } catch (err) {
     next(err);

@@ -3,8 +3,9 @@ import { roomManager } from '../../engine/RoomManager';
 import { GameRoomError } from '../../engine/GameRoom';
 import { ClientEvents, ServerEvents } from '../events';
 import { SpectateRoomSchema, parseOrError } from '../../utils/validation';
-import { supabaseAdmin } from '../../db/supabase';
+import { execute } from '../../db/turso';
 import { logger } from '../../utils/logger';
+import { nanoid } from 'nanoid';
 
 const SPECTATOR_ROOM_PREFIX = 'spectators:';
 
@@ -40,12 +41,12 @@ export function registerSpectatorHandlers(io: Server, socket: Socket) {
     io.to(room.id).emit(ServerEvents.SPECTATE_STATE, { spectatorCount: room.spectatorCount() });
 
     // Best-effort audit log — spectator_logs table (see schema). Not on the critical path.
-    supabaseAdmin
-      .from('spectator_logs')
-      .insert({ room_id: room.id, user_id: socket.data.userId, joined_at: new Date().toISOString() })
-      .then(({ error }) => {
-        if (error) logger.warn({ err: error }, 'failed to write spectator_logs row');
-      });
+    execute(
+      'INSERT INTO spectator_logs (id, room_id, user_id, joined_at) VALUES (?, ?, ?, ?)',
+      [nanoid(), room.id, socket.data.userId, new Date().toISOString()]
+    ).catch((err) => {
+      logger.warn({ err }, 'failed to write spectator_logs row');
+    });
   });
 
   socket.on(ClientEvents.SPECTATE_LEAVE, (payload: { roomId?: string }) => {

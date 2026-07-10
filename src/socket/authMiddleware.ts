@@ -1,5 +1,5 @@
 import { Socket } from 'socket.io';
-import { verifySupabaseToken } from '../auth/verifyToken';
+import { verifyToken } from '../auth/verifyToken';
 import { ensureProfile, UserProfile } from '../auth/ensureProfile';
 import { logger } from '../utils/logger';
 
@@ -10,9 +10,9 @@ export interface AuthedSocketData {
 
 /**
  * Runs once per connection, before any event handler. The client sends its
- * Supabase access token in the connection `auth` payload:
+ * JWT access token in the connection `auth` payload:
  *
- *   io("wss://your-server", { auth: { token: supabaseAccessToken } })
+ *   io("wss://your-server", { auth: { token: accessToken } })
  *
  * A socket that fails this never gets to register any game event handlers.
  */
@@ -24,7 +24,7 @@ export async function socketAuthMiddleware(
     const token = socket.handshake.auth?.token as string | undefined;
     if (!token) return next(new Error('UNAUTHENTICATED'));
 
-    const authedUser = await verifySupabaseToken(token);
+    const authedUser = await verifyToken(token);
     if (!authedUser) return next(new Error('INVALID_TOKEN'));
 
     const profile = await ensureProfile(authedUser.id, authedUser.email);

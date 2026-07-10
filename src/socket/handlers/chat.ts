@@ -3,8 +3,9 @@ import { roomManager } from '../../engine/RoomManager';
 import { ClientEvents, ServerEvents } from '../events';
 import { ChatMessageSchema, ReactionSchema, parseOrError } from '../../utils/validation';
 import { SocketEventLimiter } from '../../middleware/rateLimiter';
-import { supabaseAdmin } from '../../db/supabase';
+import { execute } from '../../db/turso';
 import { logger } from '../../utils/logger';
+import { nanoid } from 'nanoid';
 
 const chatLimiter = new SocketEventLimiter(3, 2000); // max 3 messages / 2s per user
 
@@ -31,12 +32,13 @@ export function registerChatHandlers(io: Server, socket: Socket) {
     io.to(room.id).emit(ServerEvents.CHAT_MESSAGE_RECEIVED, message);
     ack?.({ ok: true });
 
-    supabaseAdmin
-      .from('chat_logs')
-      .insert({ room_id: room.id, user_id: socket.data.userId, message: parsed.data.text })
-      .then(({ error }) => {
-        if (error) logger.warn({ err: error }, 'failed to write chat_logs row');
-      });
+    // Best-effort audit log
+    execute(
+      'INSERT INTO chat_logs (id, room_id, user_id, message) VALUES (?, ?, ?, ?)',
+      [nanoid(), room.id, socket.data.userId, parsed.data.text]
+    ).catch((err) => {
+      logger.warn({ err }, 'failed to write chat_logs row');
+    });
   });
 
   socket.on(ClientEvents.CHAT_REACTION, (payload: unknown, ack?: (res: any) => void) => {
