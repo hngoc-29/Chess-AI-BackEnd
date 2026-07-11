@@ -6,6 +6,13 @@ export interface UserProfile {
   display_name: string;
   elo: number;
   avatar_url: string | null;
+  role: 'user' | 'moderator' | 'admin';
+  games_played: number;
+  games_won: number;
+  games_drawn: number;
+  games_lost: number;
+  created_at: string;
+  updated_at: string;
 }
 
 const DEFAULT_ELO = 1200;
@@ -18,7 +25,9 @@ const DEFAULT_ELO = 1200;
 export async function ensureProfile(userId: string, email?: string | null): Promise<UserProfile> {
   try {
     const existing = await queryOne<UserProfile>(
-      'SELECT id, display_name, elo, avatar_url FROM users WHERE id = ?',
+      `SELECT id, display_name, elo, avatar_url, role, games_played, games_won,
+              games_drawn, games_lost, created_at, updated_at
+       FROM users WHERE id = ?`,
       [userId]
     );
 

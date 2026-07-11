@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAdmin, requireModerator } from '../middleware/adminAuth';
 import { httpAuth } from '../middleware/httpAuth';
 import { db } from '../db/turso';
+import { roomManager } from '../engine/RoomManager';
 import { z } from 'zod';
 
 export const adminRouter = Router();
@@ -181,5 +182,68 @@ adminRouter.get('/stats', requireModerator, async (req, res) => {
     } catch (error) {
         console.error('Error fetching stats:', error);
         res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+});
+
+// ============================================================================
+// MATCH MONITORING (Moderator+)
+// ============================================================================
+
+// GET /api/admin/matches - Live rooms (from memory) + paginated finished match history.
+// `live` is always the full current list (there are only ever a handful of
+// concurrent rooms); `completed` is paginated since match history grows
+// without bound. See GameRoom.publicState() for why `live` entries are safe
+// to return as-is - it's the same shape already broadcast to spectators.
+adminRouter.get('/matches', requireModerator, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+        const offset = (page - 1) * limit;
+        const rated = req.query.rated as string | undefined;
+
+        const live = roomManager.allActiveRooms().map((room) => room.publicState());
+
+        let sql = `
+            SELECT
+                m.id, m.white_id, m.black_id, m.winner_id, m.result_type, m.rated,
+                m.time_control, m.moves_count, m.started_at, m.ended_at, m.duration_ms,
+                m.white_elo_before, m.white_elo_after, m.black_elo_before, m.black_elo_after,
+                w.display_name AS white_name, b.display_name AS black_name
+            FROM matches m
+            LEFT JOIN users w ON w.id = m.white_id
+            LEFT JOIN users b ON b.id = m.black_id
+        `;
+        const conditions: string[] = [];
+        const args: any[] = [];
+
+        if (rated === 'true' || rated === 'false') {
+            conditions.push('m.rated = ?');
+            args.push(rated === 'true' ? 1 : 0);
+        }
+
+        if (conditions.length > 0) {
+            sql += ' WHERE ' + conditions.join(' AND ');
+        }
+
+        sql += ' ORDER BY m.ended_at DESC LIMIT ? OFFSET ?';
+        args.push(limit, offset);
+
+        const result = await db.execute({ sql, args });
+
+        let countSql = 'SELECT COUNT(*) as total FROM matches m';
+        if (conditions.length > 0) {
+            countSql += ' WHERE ' + conditions.join(' AND ');
+        }
+        const countResult = await db.execute({ sql: countSql, args: args.slice(0, -2) });
+        const total = Number(countResult.rows[0].total);
+
+        res.json({
+            live,
+            completed: result.rows,
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        });
+    } catch (error) {
+        console.error('Error fetching matches:', error);
+        res.status(500).json({ error: 'Failed to fetch matches' });
     }
 });

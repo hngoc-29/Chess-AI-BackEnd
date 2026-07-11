@@ -11,6 +11,14 @@ export const turso = createClient({
 });
 
 /**
+ * Alias for `turso`. The admin middleware/routes (adminAuth.ts,
+ * admin.routes.ts, admin-levels.routes.ts) call `db.execute({ sql, args })`
+ * directly against the raw client - this alias exists so those imports
+ * resolve without rewriting every call site.
+ */
+export const db = turso;
+
+/**
  * Helper to execute a query and return all rows
  */
 export async function query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
