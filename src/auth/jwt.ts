@@ -4,7 +4,7 @@ import { env } from '../config/env';
 
 export interface JWTPayload {
     userId: string;
-    email: string;
+    email: string | null;
     iat?: number;
     exp?: number;
 }
@@ -12,7 +12,7 @@ export interface JWTPayload {
 /**
  * Generate JWT access token (expires in 7 days)
  */
-export function generateAccessToken(userId: string, email: string): string {
+export function generateAccessToken(userId: string, email: string | null): string {
     const payload: JWTPayload = { userId, email };
     return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '7d' });
 }
@@ -20,7 +20,7 @@ export function generateAccessToken(userId: string, email: string): string {
 /**
  * Generate JWT refresh token (expires in 30 days)
  */
-export function generateRefreshToken(userId: string, email: string): string {
+export function generateRefreshToken(userId: string, email: string | null): string {
     const payload: JWTPayload = { userId, email };
     return jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: '30d' });
 }

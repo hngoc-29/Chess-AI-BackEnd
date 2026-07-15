@@ -17,6 +17,24 @@ const EnvSchema = z.object({
   MATCHMAKING_TIMEOUT_MS: z.coerce.number().default(60_000),
   MATCHMAKING_INITIAL_ELO_RANGE: z.coerce.number().default(100),
   MATCHMAKING_MAX_ELO_RANGE: z.coerce.number().default(600),
+  // When a player hits MATCHMAKING_TIMEOUT_MS with no human opponent found,
+  // pair them with a bot account instead of leaving them waiting. Off ->
+  // falls back to the original behavior (QUEUE_TIMEOUT, still searching).
+  // NOTE: intentionally not z.coerce.boolean() - that coerces ANY non-empty
+  // string (including the literal text "false") to true, which would make
+  // this impossible to disable via env var.
+  MATCHMAKING_BOT_FALLBACK_ENABLED: z
+    .string()
+    .default('true')
+    .transform((v) => v.trim().toLowerCase() !== 'false'),
+
+  // OAuth login providers. Optional and unvalidated at boot on purpose -
+  // until real values are configured, /api/auth/oauth/* fails closed with a
+  // clear 501 (see auth.routes.ts) rather than blocking the whole server
+  // from starting over a feature that isn't wired up yet.
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  FACEBOOK_APP_ID: z.string().optional(),
+  FACEBOOK_APP_SECRET: z.string().optional(),
 
   DEFAULT_TIME_CONTROL_MINUTES: z.coerce.number().default(10),
   DEFAULT_TIME_CONTROL_INCREMENT_SEC: z.coerce.number().default(5),

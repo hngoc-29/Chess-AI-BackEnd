@@ -1,7 +1,8 @@
 import { Server, Socket } from 'socket.io';
 import { roomManager } from '../../engine/RoomManager';
 import { GameRoom, GameRoomError } from '../../engine/GameRoom';
-import { persistFinishedMatch } from '../../services/matchService';
+import { finishAndBroadcast } from '../broadcast';
+import { maybeTriggerBotMove, maybeRespondToDrawOffer } from '../../bot/botController';
 import { ClientEvents, ServerEvents } from '../events';
 import {
   DrawResponseSchema,
@@ -17,23 +18,6 @@ const moveLimiter = new SocketEventLimiter(env.SOCKET_MOVE_RATE_LIMIT_PER_SEC);
 
 // userId -> pending forfeit timer, so a reconnect within the grace period cancels it.
 const abandonTimers = new Map<string, NodeJS.Timeout>();
-
-async function finishAndBroadcast(io: Server, room: GameRoom) {
-  io.to(room.id).emit(ServerEvents.GAME_OVER, {
-    roomId: room.id,
-    result: room.result,
-    pgn: room.pgn(),
-    finalFen: room.fen(),
-  });
-  try {
-    if (room.settings.mode !== 'campaign') {
-      const persisted = await persistFinishedMatch(room);
-      io.to(room.id).emit(ServerEvents.GAME_STATE, { ...room.publicState(), ...persisted });
-    }
-  } catch (err) {
-    logger.error({ err, roomId: room.id }, 'failed to persist finished match');
-  }
-}
 
 export function registerGameHandlers(io: Server, socket: Socket) {
   // Cancel any pending abandon-forfeit for this user across their rooms on (re)connect.
@@ -77,7 +61,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         userId: socket.data.userId,
         from: parsed.data.from,
         to: parsed.data.to,
-        promotion: parsed.data.promotion,
+        // MakeMoveSchema accepts promotion as null (matching what real
+        // clients send for a non-promotion move); GameRoom.applyMove only
+        // distinguishes "no promotion" via undefined, so normalize here.
+        promotion: parsed.data.promotion ?? undefined,
         expectedMoveIndex: parsed.data.expectedMoveIndex,
         clientTimestamp: parsed.data.clientTimestamp,
       });
@@ -87,6 +74,8 @@ export function registerGameHandlers(io: Server, socket: Socket) {
 
       if (room.status === 'finished') {
         void finishAndBroadcast(io, room);
+      } else {
+        maybeTriggerBotMove(io, room);
       }
     } catch (err) {
       if (err instanceof GameRoomError) {
@@ -123,6 +112,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
       room.offerDraw(socket.data.userId);
       ack?.({ ok: true });
       io.to(room.id).emit(ServerEvents.GAME_STATE, room.publicState());
+      maybeRespondToDrawOffer(io, room);
     } catch (err) {
       if (err instanceof GameRoomError) ack?.({ ok: false, error: err.message, code: err.code });
     }

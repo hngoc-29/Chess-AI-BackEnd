@@ -23,7 +23,7 @@ adminRouter.get('/users', requireAdmin, async (req, res) => {
         const search = req.query.search as string || '';
         const role = req.query.role as string || '';
 
-        let sql = 'SELECT id, email, display_name, role, is_banned, elo, games_played, created_at FROM users';
+        let sql = 'SELECT id, email, display_name, role, is_banned, elo, games_played, is_bot, created_at FROM users';
         const conditions: string[] = [];
         const args: any[] = [];
 
@@ -177,7 +177,13 @@ adminRouter.get('/stats', requireModerator, async (req, res) => {
         res.json({
             totalUsers: Number(usersCount.rows[0].count),
             totalMatches: Number(matchesCount.rows[0].count),
-            activeUsersToday: Number(activeToday.rows[0].count)
+            activeUsersToday: Number(activeToday.rows[0].count),
+            // docs-admin's dashboard card previously read `stats.onlineNow`,
+            // which this endpoint never returned (always showed 0). Accurate
+            // "online now" would need dedicated presence tracking across all
+            // connected sockets, not just in-game ones - out of scope here.
+            // liveGames is honest about what's actually being counted.
+            liveGames: roomManager.stats().activeRooms,
         });
     } catch (error) {
         console.error('Error fetching stats:', error);

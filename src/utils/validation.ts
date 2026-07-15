@@ -27,7 +27,7 @@ export const MakeMoveSchema = z.object({
   roomId: z.string().min(4).max(20),
   from: z.string().regex(/^[a-h][1-8]$/, 'invalid square'),
   to: z.string().regex(/^[a-h][1-8]$/, 'invalid square'),
-  promotion: z.enum(['q', 'r', 'b', 'n']).optional(),
+  promotion: z.enum(['q', 'r', 'b', 'n']).optional().nullable(),
   expectedMoveIndex: z.number().int().min(0).optional(),
   clientTimestamp: z.number().optional(),
 });

@@ -3,9 +3,13 @@ import { logger } from '../utils/logger';
 
 export interface UserProfile {
   id: string;
+  email: string | null;
   display_name: string;
   elo: number;
   avatar_url: string | null;
+  /** Opaque to the backend - client decides what goes in here (sound, board style, ...). */
+  settings: string;
+  auth_provider: 'email' | 'google' | 'facebook' | 'guest';
   role: 'user' | 'moderator' | 'admin';
   games_played: number;
   games_won: number;
@@ -25,8 +29,8 @@ const DEFAULT_ELO = 1200;
 export async function ensureProfile(userId: string, email?: string | null): Promise<UserProfile> {
   try {
     const existing = await queryOne<UserProfile>(
-      `SELECT id, display_name, elo, avatar_url, role, games_played, games_won,
-              games_drawn, games_lost, created_at, updated_at
+      `SELECT id, email, display_name, elo, avatar_url, settings, auth_provider, role,
+              games_played, games_won, games_drawn, games_lost, created_at, updated_at
        FROM users WHERE id = ?`,
       [userId]
     );

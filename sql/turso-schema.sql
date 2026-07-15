@@ -9,15 +9,21 @@
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
+  email TEXT UNIQUE,
+  password_hash TEXT,
+  -- 'email' | 'google' | 'facebook' | 'guest'. See migrations/002 for the
+  -- rationale (email/password_hash had to become nullable for this).
+  auth_provider TEXT NOT NULL DEFAULT 'email' CHECK (auth_provider IN ('email', 'google', 'facebook', 'guest')),
+  provider_id TEXT,
   display_name TEXT NOT NULL,
   avatar_url TEXT,
+  settings TEXT NOT NULL DEFAULT '{}',
   role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'moderator', 'admin')),
   is_banned INTEGER NOT NULL DEFAULT 0 CHECK (is_banned IN (0, 1)),
   banned_until TEXT,
   ban_reason TEXT,
   elo INTEGER NOT NULL DEFAULT 1200 CHECK (elo BETWEEN 0 AND 4000),
+  is_bot INTEGER NOT NULL DEFAULT 0 CHECK (is_bot IN (0, 1)),
   games_played INTEGER NOT NULL DEFAULT 0,
   games_won INTEGER NOT NULL DEFAULT 0,
   games_drawn INTEGER NOT NULL DEFAULT 0,
@@ -30,6 +36,8 @@ CREATE INDEX IF NOT EXISTS idx_users_elo ON users (elo DESC);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users (role);
 CREATE INDEX IF NOT EXISTS idx_users_banned ON users (is_banned) WHERE is_banned = 1;
+CREATE INDEX IF NOT EXISTS idx_users_bot_elo ON users (is_bot, elo) WHERE is_bot = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_provider ON users (auth_provider, provider_id) WHERE provider_id IS NOT NULL;
 
 -- Trigger to update updated_at on every update
 CREATE TRIGGER IF NOT EXISTS trg_users_updated_at

@@ -3,14 +3,15 @@ import { AuthedUser, UserRole } from '../types';
 import { db } from '../db/turso';
 
 /**
- * Middleware để kiểm tra role của user
- * Yêu cầu httpAuth middleware phải chạy trước để có req.user
+ * Middleware để kiểm tra role của user.
+ * Yêu cầu httpAuth middleware phải chạy trước - httpAuth populates
+ * req.userId/req.profile (not req.user), which is what this reads.
  */
 export function requireRole(...allowedRoles: UserRole[]) {
     return async (req: Request, res: Response, next: NextFunction) => {
-        const user = (req as any).user as AuthedUser | undefined;
+        const userId = req.userId;
 
-        if (!user || !user.id) {
+        if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
@@ -18,7 +19,7 @@ export function requireRole(...allowedRoles: UserRole[]) {
             // Lấy role từ database
             const result = await db.execute({
                 sql: 'SELECT role, is_banned FROM users WHERE id = ?',
-                args: [user.id]
+                args: [userId]
             });
 
             if (result.rows.length === 0) {
@@ -43,9 +44,10 @@ export function requireRole(...allowedRoles: UserRole[]) {
                 });
             }
 
-            // Attach role to user object for downstream use
-            user.role = userRole;
-            (req as any).user = user;
+            // Attach a lightweight AuthedUser for downstream admin routes
+            // that want the acting user's id (e.g. admin-levels.routes.ts
+            // records created_by from this).
+            (req as any).user = { id: userId, role: userRole } as AuthedUser;
 
             next();
         } catch (error) {
