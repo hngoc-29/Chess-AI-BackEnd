@@ -3,6 +3,7 @@ import { requireAdmin, requireModerator } from '../middleware/adminAuth';
 import { httpAuth } from '../middleware/httpAuth';
 import { db } from '../db/turso';
 import { roomManager } from '../engine/RoomManager';
+import { getBotUserId } from '../bot/botController';
 import { z } from 'zod';
 
 export const adminRouter = Router();
@@ -22,8 +23,9 @@ adminRouter.get('/users', requireAdmin, async (req, res) => {
         const offset = (page - 1) * limit;
         const search = req.query.search as string || '';
         const role = req.query.role as string || '';
+        const provider = req.query.provider as string || '';
 
-        let sql = 'SELECT id, email, display_name, role, is_banned, elo, games_played, is_bot, created_at FROM users';
+        let sql = 'SELECT id, email, display_name, role, is_banned, elo, games_played, is_bot, auth_provider, created_at FROM users';
         const conditions: string[] = [];
         const args: any[] = [];
 
@@ -35,6 +37,11 @@ adminRouter.get('/users', requireAdmin, async (req, res) => {
         if (role && ['user', 'moderator', 'admin'].includes(role)) {
             conditions.push('role = ?');
             args.push(role);
+        }
+
+        if (provider && ['email', 'google', 'facebook', 'guest'].includes(provider)) {
+            conditions.push('auth_provider = ?');
+            args.push(provider);
         }
 
         if (conditions.length > 0) {
@@ -165,8 +172,11 @@ adminRouter.post('/users/:id/unban', requireModerator, async (req, res) => {
 // GET /api/admin/stats - Dashboard statistics
 adminRouter.get('/stats', requireModerator, async (req, res) => {
     try {
-        const [usersCount, matchesCount, activeToday] = await Promise.all([
-            db.execute({ sql: 'SELECT COUNT(*) as count FROM users', args: [] }),
+        const [usersCount, botCount, matchesCount, activeToday] = await Promise.all([
+            // Excludes bot accounts - "Total Users" should mean real people,
+            // not the seeded matchmaking-fallback pool (see src/bot/).
+            db.execute({ sql: 'SELECT COUNT(*) as count FROM users WHERE is_bot = 0', args: [] }),
+            db.execute({ sql: 'SELECT COUNT(*) as count FROM users WHERE is_bot = 1', args: [] }),
             db.execute({ sql: 'SELECT COUNT(*) as count FROM matches', args: [] }),
             db.execute({
                 sql: "SELECT COUNT(DISTINCT user_id) as count FROM matches WHERE DATE(ended_at) = DATE('now')",
@@ -176,6 +186,7 @@ adminRouter.get('/stats', requireModerator, async (req, res) => {
 
         res.json({
             totalUsers: Number(usersCount.rows[0].count),
+            botAccounts: Number(botCount.rows[0].count),
             totalMatches: Number(matchesCount.rows[0].count),
             activeUsersToday: Number(activeToday.rows[0].count),
             // docs-admin's dashboard card previously read `stats.onlineNow`,
@@ -207,14 +218,23 @@ adminRouter.get('/matches', requireModerator, async (req, res) => {
         const offset = (page - 1) * limit;
         const rated = req.query.rated as string | undefined;
 
-        const live = roomManager.allActiveRooms().map((room) => room.publicState());
+        const live = roomManager.allActiveRooms().map((room) => {
+            const state = room.publicState();
+            const botUserId = getBotUserId(room.id);
+            return {
+                ...state,
+                white: { ...state.white, isBot: botUserId === state.white.userId },
+                black: { ...state.black, isBot: botUserId === state.black.userId },
+            };
+        });
 
         let sql = `
             SELECT
                 m.id, m.white_id, m.black_id, m.winner_id, m.result_type, m.rated,
                 m.time_control, m.moves_count, m.started_at, m.ended_at, m.duration_ms,
                 m.white_elo_before, m.white_elo_after, m.black_elo_before, m.black_elo_after,
-                w.display_name AS white_name, b.display_name AS black_name
+                w.display_name AS white_name, b.display_name AS black_name,
+                w.is_bot AS white_is_bot, b.is_bot AS black_is_bot
             FROM matches m
             LEFT JOIN users w ON w.id = m.white_id
             LEFT JOIN users b ON b.id = m.black_id

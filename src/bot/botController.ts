@@ -28,6 +28,11 @@ export function roomHasBot(roomId: string): boolean {
   return botRooms.has(roomId);
 }
 
+/** Which userId is the bot in this room, if any - used by the admin matches endpoint. */
+export function getBotUserId(roomId: string): string | null {
+  return botRooms.get(roomId)?.botUserId ?? null;
+}
+
 function cleanupIfFinished(room: GameRoom): void {
   if (room.status !== 'active') botRooms.delete(room.id);
 }
